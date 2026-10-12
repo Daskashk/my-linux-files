@@ -1,0 +1,24 @@
+game:
+  exe: /run/media/nab/Main/Games/Torchlight II/torchlight2.exe
+  prefix: /home/nab/Games/lutris prefix
+  working_dir: /home/nab/Games/Torchlight II
+system:
+  disable_runtime: false
+  env: {}
+  gamescope: false
+  mangohud: true
+  prefer_system_libs: true
+  pulse_latency: true
+  terminal_app: /usr/bin/konsole
+wine:
+  Graphics: wayland
+  ShowCrashDialog: true
+  autoconf_joypad: false
+  battleye: false
+  d3d_extras: true
+  dxvk: true
+  eac: false
+  fsr: false
+  show_debug: -all
+  system_winetricks: true
+  version: GE-Proton10-34

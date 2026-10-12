@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+#
+# netcheck - Network Privacy & DNS Leak Test
+# Lightweight, secure, and color-aware.
+#
+
+set -e
+
+# --- CONFIGURATION ---
+API_DNS="bash.ws"
+API_IP="https://am.i.mullvad.net/json"
+
+# --- COLORS (Only for highlights/alerts) ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# --- DEPENDENCIES CHECK ---
+command -v curl >/dev/null 2>&1 || { echo "Error: curl is required."; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "Error: jq is required."; exit 1; }
+command -v ping >/dev/null 2>&1 || { echo "Error: ping is required."; exit 1; }
+
+# --- HEADER ---
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "           NETWORK PRIVACY CHECKER"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ---------------------------------------------------------
+# SECTION 1: IDENTITY (Mullvad API)
+# ---------------------------------------------------------
+echo ""
+echo "[1] External IP Identity"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+IP_DATA=$(curl -s --connect-timeout 5 "$API_IP")
+
+if [[ -n "$IP_DATA" ]]; then
+    echo "$IP_DATA" | jq -r '
+        "  IP:       \(.ip)",
+        "  Location: \(.country) (\(.city))",
+        "  ISP:      \(.organization)"
+    '
+else
+    echo -e "${RED}  Failed to retrieve IP information.${NC}"
+    exit 1
+fi
+
+# ---------------------------------------------------------
+# SECTION 2: DNS LEAK TEST (Bash.ws Logic)
+# ---------------------------------------------------------
+echo ""
+echo "[2] DNS Leak Test"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo -n "  Initializing test... "
+
+# Get Session ID
+ID=$(curl -s "https://${API_DNS}/id")
+
+# --- SECURITY CHECK: Validate ID ---
+# Ensure ID is alphanumeric to prevent injection in the ping command
+if [[ ! "$ID" =~ ^[a-zA-Z0-9]+$ ]]; then
+    echo -e "${RED}Failed (Invalid Session ID)${NC}"
+    exit 1
+fi
+echo "OK"
+
+echo -n "  Sending DNS probes... "
+
+# Trigger DNS requests (Ping loop)
+for i in $(seq 1 10); do
+    ping -c 1 "${i}.${ID}.${API_DNS}" >/dev/null 2>&1 &
+done
+wait
+echo "OK"
+
+echo -n "  Analyzing results... "
+
+# Fetch Results
+RESULT_JSON=$(curl -s "https://${API_DNS}/dnsleak/test/${ID}?json")
+
+if [[ -z "$RESULT_JSON" ]]; then
+    echo -e "${RED}Failed (No Results)${NC}"
+    exit 1
+fi
+echo "OK"
+
+# Parse and Display DNS Servers
+DNS_COUNT=$(echo "$RESULT_JSON" | jq '[.[] | select(.type == "dns")] | length')
+
+echo ""
+if [[ "$DNS_COUNT" -eq 0 ]]; then
+    echo -e "  ${GREEN}No DNS servers detected.${NC}"
+else
+    if [[ "$DNS_COUNT" -eq 1 ]]; then
+        echo "  You use 1 DNS server:"
+    else
+        echo "  You use $DNS_COUNT DNS servers:"
+    fi
+
+    # Print formatted list (using default terminal color)
+    echo "$RESULT_JSON" | jq -r '.[] | select(.type == "dns") |
+        "    -> \(.ip) [\(.country_name // "Unknown")] \(.asn // "")"
+    '
+fi
+
+# ---------------------------------------------------------
+# SECTION 3: CONCLUSION
+# ---------------------------------------------------------
+echo ""
+echo "[3] Verdict"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+CONCLUSION=$(echo "$RESULT_JSON" | jq -r '.[] | select(.type == "conclusion") | .ip')
+
+if [[ "$CONCLUSION" == *"leak"* ]]; then
+    echo -e "  ${RED}⚠️  ${CONCLUSION}${NC}"
+else
+    echo -e "  ${GREEN}✅ ${CONCLUSION}${NC}"
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

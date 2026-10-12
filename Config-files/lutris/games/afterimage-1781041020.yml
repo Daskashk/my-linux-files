@@ -1,0 +1,19 @@
+game:
+  args: ''
+  exe: /run/media/nab/Main/Games/Afterimage.v14.05.2023/Game/Afterimage.exe
+  prefix: /run/media/nab/Main/Games/Afterimage.v14.05.2023/wineprefix
+  working_dir: /run/media/nab/Main/Games/Afterimage.v14.05.2023/Game
+system:
+  disable_runtime: true
+  env: {}
+  gamemode: true
+  mangohud: true
+  prefer_system_libs: true
+  pulse_latency: true
+wine:
+  Graphics: wayland
+  battleye: false
+  eac: false
+  fsr: false
+  system_winetricks: false
+  version: GE-Proton10-34

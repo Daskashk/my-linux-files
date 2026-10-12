@@ -1,0 +1,16 @@
+# Configuración para que newsboat use los colores por defecto de la terminal
+# Usando 'default' para todos los elementos como se hace en fastfetch
+
+# Configuración de colores usando 'default' para respetar terminal colors
+color background          default   default
+color listnormal          default   default
+color listfocus           default  default reverse
+color listnormal_unread   default   default
+color listfocus_unread    default  default reverse
+color title               default  default reverse
+color info                default  default
+color hint-key            default  default
+color hint-keys-delimiter default   default
+color hint-separator      default   default
+color hint-description    default   default
+color article             default   default reverse

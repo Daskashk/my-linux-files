@@ -1,0 +1,6 @@
+system:
+  disable_runtime: true
+  env: {}
+  mangohud: true
+  prefix_command: bwrap --dev-bind / / --unshare-net
+  terminal_app: /usr/bin/konsole

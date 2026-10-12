@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# ============================================
+# CONFIGURATION
+# ============================================
+# Fetch the latest version automatically
+LATEST_VERSION=$(curl -s --proto =https --tlsv1.2 https://codeberg.org/api/v1/repos/celenity/Phoenix/releases/latest | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$LATEST_VERSION" ]; then
+    echo "❌ Could not fetch the latest version. Please set PHOENIX_VERSION manually."
+    # PHOENIX_VERSION="2.5.0"  # Uncomment and set a version if needed
+    exit 1
+fi
+
+PHOENIX_VERSION="$LATEST_VERSION"
+BASE_URL="https://releases.celenity.dev/phoenix/releases/${PHOENIX_VERSION}/linux"
+
+# Installation directory (official Phoenix standard)
+CONFIG_DIR="/etc/firefox"
+
+# Secure and functional curl
+CURL_CMD="curl --proto =https --tlsv1.2 --referer '' --user-agent '' -L --fail --retry 3 --retry-connrefused -sS -O"
+
+# ============================================
+# PREPARATION
+# ============================================
+TMP_DIR=$(mktemp -d)
+cd "$TMP_DIR" || exit 1
+
+echo "🔄 Downloading Phoenix version ${PHOENIX_VERSION} from ${BASE_URL}..."
+
+# 1: Download the official archive
+$CURL_CMD "${BASE_URL}/phoenix-${PHOENIX_VERSION}-linux.tar.xz" || {
+    echo "❌ Failed to download the archive"
+    exit 1
+}
+
+# 2: Extract the archive
+mkdir -p phoenix
+tar -xvf "phoenix-${PHOENIX_VERSION}-linux.tar.xz" -C phoenix || {
+    echo "❌ Failed to extract the archive"
+    exit 1
+}
+
+cd phoenix || exit 1
+
+# ============================================
+# GLOBAL INSTALLATION (official steps 3–8)
+# ============================================
+echo "🔧 Installing global files to ${CONFIG_DIR}..."
+
+# Create directories
+sudo mkdir -p "${CONFIG_DIR}/defaults/pref" "${CONFIG_DIR}/policies"
+sudo chmod 755 "${CONFIG_DIR}/defaults/pref" "${CONFIG_DIR}/policies"
+
+# Step 4: Copy phoenix.cfg
+sudo cp -f phoenix.cfg "${CONFIG_DIR}/phoenix.cfg"
+
+# Step 6: Copy phoenix.js
+sudo cp -f defaults/pref/phoenix.js "${CONFIG_DIR}/defaults/pref/phoenix.js"
+
+# Step 8: Copy policies.json
+sudo cp -f policies/policies.json "${CONFIG_DIR}/policies/policies.json"
+
+echo "✅ Global files installed in /etc/firefox"
+
+# ============================================
+# CLEANUP
+# ============================================
+cd ~ || exit 1
+rm -rf "$TMP_DIR"
+echo "🎉 Update completed! Version ${PHOENIX_VERSION} installed."
+
+# ============================================
+# OPTIONAL: OPEN RESTART TAB IN LIBREWOLF
+# ============================================
+read -p "Do you want to open the restart tab in LibreWolf now? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if command -v librewolf &> /dev/null; then
+        echo "🔄 Opening about:restartrequired in LibreWolf..."
+        librewolf "about:restartrequired" &
+        echo "✅ Restart tab opened. Click 'Restart' to apply changes."
+    else
+        echo "⚠️ LibreWolf command not found. Please restart manually."
+    fi
+else
+    echo "ℹ️  Remember to restart LibreWolf manually."
+fi

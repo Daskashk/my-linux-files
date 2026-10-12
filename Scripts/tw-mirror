@@ -1,0 +1,110 @@
+#!/bin/bash
+
+#######################################################################
+# SCRIPT: OpenSUSE Tumbleweed Mirror Finder (Simple & Hardcoded)
+# DESCRIPTION: Pings a hardcoded list of American mirrors to find the
+#              fastest one based on latency and stability.
+# USAGE:       ./script.sh
+#######################################################################
+
+# --- CONFIGURATION ---
+
+# List of mirrors (Domains only).
+# Filtered manually for Americas (North & South) with 'repo' tag.
+# To update: Simply edit this list.
+DOMAIN_LIST=(
+"mirror.csclub.uwaterloo.ca"
+"mirror.xenyth.net"
+"muug.ca"
+"codingflyboy.mm.fcix.net"
+"mirror.clarkson.edu"
+"mirror.fcix.net"
+"mirror.sfo12.us.leaseweb.net"
+"mirror.siena.edu"
+"mirror.umd.edu"
+"mirror.us.leaseweb.net"
+"mirrors.acm.wpi.edu"
+"nnenix.mm.fcix.net"
+"opensuse-mirror-gce-us.susecloud.net"
+"slc-mirror.opensuse.org"
+"www.gtlib.gatech.edu"
+"linorg.usp.br"
+"mirror-br.opensuse.org"
+"mirror.uepg.br"
+"mirror.ufscar.br"
+"opensuse.c3sl.ufpr.br"
+"opensuse.ic.ufmt.br"
+"espejito.fder.edu.uy"
+)
+
+# Ping parameters
+PING_COUNT=5
+PING_TIMEOUT=1
+
+# Temporary storage
+TEMP_FILE=$(mktemp)
+trap "rm -f $TEMP_FILE" EXIT
+
+#######################################################################
+# EXECUTION
+#######################################################################
+
+echo "###################################################################"
+echo "#          OpenSUSE Tumbleweed Mirror Analyzer (Americas)         #"
+echo "###################################################################"
+echo ""
+echo "[INFO] Testing ${#DOMAIN_LIST[@]} mirrors in parallel..."
+echo "       (Measuring latency and stability with 5 pings)"
+echo ""
+
+# Loop through the array and run pings in background
+for DOMAIN in "${DOMAIN_LIST[@]}"; do
+    (
+        # Run ping, capture output
+        PING_RESULT=$(ping -c $PING_COUNT -W $PING_TIMEOUT "$DOMAIN" 2>/dev/null)
+
+        # If ping successful (exit code 0)
+        if [ $? -eq 0 ]; then
+            # Extract Average Latency (field 5)
+            AVG=$(echo "$PING_RESULT" | tail -1 | awk -F'/' '{print $5}')
+            # Extract Standard Deviation/Stability (field 7)
+            STDEV=$(echo "$PING_RESULT" | tail -1 | awk -F'/' '{print $7}')
+
+            # Save to temp file: Domain|Avg|Stdev
+            echo "$DOMAIN|$AVG|$STDEV" >> "$TEMP_FILE"
+        fi
+    ) &
+done
+
+# Wait for all background processes to finish
+wait
+
+#######################################################################
+# RESULTS
+#######################################################################
+
+echo "###################################################################"
+echo "#                     RESULTS (Sorted by Speed)                    #"
+echo "###################################################################"
+echo ""
+printf "%-50s %-12s %-12s\n" "DOMAIN" "AVG (ms)" "STDEV (ms)"
+echo "-----------------------------------------------------------------------"
+
+# Check if file is empty
+if [ -s "$TEMP_FILE" ]; then
+    # Sort numerically by field 2 (Latency) and print
+    sort -t"|" -k2 -n "$TEMP_FILE" | while IFS="|" read -r DOM AVG STDEV; do
+        printf "%-50s %-12s %-12s\n" "$DOM" "$AVG" "$STDEV"
+    done
+
+    echo ""
+    echo "🏆 FASTEST MIRROR:"
+    # Get the top result
+    BEST=$(sort -t"|" -k2 -n "$TEMP_FILE" | head -n 1)
+    BEST_DOM=$(echo "$BEST" | cut -d"|" -f1)
+    BEST_AVG=$(echo "$BEST" | cut -d"|" -f2)
+
+    echo "   $BEST_DOM (Latency: $BEST_AVG ms)"
+else
+    echo "❌ No reachable mirrors found."
+fi

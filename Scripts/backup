@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# ########################################################
+# PARTE 1: CONFIGURACIÓN DE LAS RUTAS
+# ########################################################
+# Aquí definimos dónde están tus discos.
+# Si algún día cambias el nombre de un disco, solo cambia esto aquí.
+
+MAIN="/run/media/nab/Main/"
+BACKUP1="/run/media/nab/Backup/"      # El disco lleno (Anime recientes)
+BACKUP2="/run/media/nab/Backup2/"     # El disco libre (Anime viejo + Games)
+
+# Opciones de Rsync estándar
+# -a: Modo archivo (copia permisos, fechas, dueños). Es clave para que sea una copia idéntica.
+# -v: Verbose (muestra texto de lo que hace).
+# -h: Human readable (tamaños en MB, GB en lugar de bytes).
+# --delete: IMPORTANTE. Si borras algo en MAIN, lo borra en el Backup para que sean iguales.
+OPCIONES="-avh --delete --progress --stats"
+
+# ########################################################
+# PARTE 2: BACKUP AL DISCO 1
+# ########################################################
+# Solo copiamos los años recientes (2021 al 2025) en este disco.
+# Excluimos explícitamente todo lo demás.
+
+echo "--------------------------------------------------"
+echo "Starting Anime copy -> Backup1 Disk..."
+echo "--------------------------------------------------"
+
+rsync $OPCIONES \
+    --exclude="2018/" \
+    --exclude="2019/" \
+    --exclude="2020/" \
+    --exclude="borrar/" \
+    --exclude="incompletas/" \
+    --exclude="Nueva/" \
+    --exclude="Old/" \
+    --exclude="Organizar/" \
+    --exclude="2026/" \
+    "$MAIN/Anime/" "$BACKUP1/Anime/"
+
+# ########################################################
+# PARTE 3: BACKUP AL DISCO 2
+# ########################################################
+# Aquí copiamos todo lo que NO fue al Backup1.
+# Por eso excluimos los años 2021-2025.
+# Si creas una carpeta "2026", como NO está en la lista de exclude, irá aquí automáticamente.
+
+echo "--------------------------------------------------"
+echo "Starting Anime copy -> Backup2 Disk..."
+echo "--------------------------------------------------"
+
+rsync $OPCIONES \
+    --exclude="2021/" \
+    --exclude="2022/" \
+    --exclude="2023/" \
+    --exclude="2024/" \
+    --exclude="2025/" \
+    "$MAIN/Anime/" "$BACKUP2/Anime/"
+
+# ########################################################
+# PARTE 4: BACKUP DE GAMES
+# ########################################################
+# Copia completa de la carpeta Games al Backup2.
+
+echo "--------------------------------------------------"
+echo "Starting Games copy -> Backup2 Disk..."
+echo "--------------------------------------------------"
+
+rsync $OPCIONES "$MAIN/Games/" "$BACKUP2/Games/"
+
+# Nota: La carpeta "Otros" NO se menciona, así que se ignora totalmente.
+
+# ########################################################
+# PARTE 5: NOTIFICACIÓN FINAL
+# ########################################################
+# Cuando termina todo el script, salta esta ventana emergente.
+
+kdialog --title "Backup Finished" --msgbox "The copy process has finished successfully!"

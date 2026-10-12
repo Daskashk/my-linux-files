@@ -1,0 +1,153 @@
+#!/bin/bash
+
+# ==========================================
+# HARDENING & STRICT MODE
+# ==========================================
+set -euo pipefail
+
+# ==========================================
+# CONFIGURATION
+# ==========================================
+
+# Target profile directory (Ensure this path is correct)
+TARGET_PROFILE="/home/nab/.librewolf/7bge8k48.default"
+
+# Repository URL (HTTPS is required here to avoid SSH key prompts)
+REPO_URL="https://github.com/QNetITQ/WaveFox.git"
+
+# Backup file name
+BACKUP_FILE="chrome_backup.tar.gz"
+
+# ==========================================
+# FUNCTIONS
+# ==========================================
+
+print_msg() {
+    echo -e "\033[1;34m[INFO]\033[0m $1"
+}
+
+print_success() {
+    echo -e "\033[1;32m[SUCCESS]\033[0m $1"
+}
+
+print_error() {
+    echo -e "\033[1;31m[ERROR]\033[0m $1"
+}
+
+cleanup() {
+    if [ -d "${TEMP_DIR:-}" ]; then
+        print_msg "Cleaning up temporary files..."
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+# ==========================================
+# MAIN SCRIPT
+# ==========================================
+
+trap cleanup EXIT INT TERM
+
+echo "=========================================="
+echo "       WaveFox Theme Updater"
+echo "=========================================="
+
+# 1. Security & Validation Checks
+
+if [ "$(id -u)" -eq 0 ]; then
+    print_error "This script must NOT be run as root. Run as your normal user."
+    exit 1
+fi
+
+if [ ! -d "$TARGET_PROFILE" ]; then
+    print_error "The profile directory does not exist: $TARGET_PROFILE"
+    exit 1
+fi
+
+if [ ! -f "$TARGET_PROFILE/prefs.js" ]; then
+    print_error "The directory does not look like a valid browser profile (prefs.js missing)."
+    exit 1
+fi
+
+for cmd in git tar cp rm; do
+    if ! command -v "$cmd" &> /dev/null; then
+        print_error "Required command '$cmd' is not installed."
+        exit 1
+    fi
+done
+
+# 2. Setup temporary directory
+TEMP_DIR=$(mktemp -d)
+print_msg "Temporary workspace created at: $TEMP_DIR"
+
+# 3. Download Process
+print_msg "Downloading latest WaveFox repository..."
+
+# FIX: We isolate the git command.
+# GIT_CONFIG_GLOBAL=/dev/null tells git to ignore the user's global config (~/.gitconfig).
+# This prevents URL rewrites (like https -> ssh) and avoids SSH key prompts.
+if ! GIT_CONFIG_GLOBAL=/dev/null git clone --depth 1 --quiet "$REPO_URL" "$TEMP_DIR/WaveFox"; then
+    print_error "Failed to clone repository. Check your internet connection."
+    # Note: We do not use 'exit 1' directly here because 'trap' will handle cleanup.
+    # However, 'set -e' handles the exit on failure, but we want a custom message.
+    # Since 'set -e' is active, the 'if' catches the error.
+    # If we were not in an if, script would exit here.
+    exit 1
+fi
+print_success "Repository downloaded successfully."
+
+# Validation
+SOURCE_CHROME="$TEMP_DIR/WaveFox/chrome"
+if [ ! -d "$SOURCE_CHROME" ]; then
+    print_error "The 'chrome' folder was not found in the downloaded repository."
+    exit 1
+fi
+
+if [ ! -f "$SOURCE_CHROME/userChrome.css" ]; then
+    print_error "Downloaded repository seems incomplete (userChrome.css missing)."
+    exit 1
+fi
+
+# 4. Backup Process
+CHROME_DIR="$TARGET_PROFILE/chrome"
+BACKUP_PATH="$TARGET_PROFILE/$BACKUP_FILE"
+
+if [ -d "$CHROME_DIR" ]; then
+    print_msg "Compressing existing 'chrome' folder..."
+
+    if tar -czf "$BACKUP_PATH" -C "$TARGET_PROFILE" chrome; then
+        print_success "Backup created: $BACKUP_FILE"
+        print_msg "Removing old 'chrome' folder..."
+        rm -rf "$CHROME_DIR"
+    else
+        print_error "Failed to create backup. Aborting to prevent data loss."
+        exit 1
+    fi
+else
+    print_msg "No existing 'chrome' folder found. Skipping backup."
+fi
+
+# 5. Installation Process
+print_msg "Installing new theme files..."
+
+if cp -a "$SOURCE_CHROME" "$TARGET_PROFILE/"; then
+    print_success "New 'chrome' folder copied successfully."
+else
+    print_error "Failed to copy new theme files."
+
+    if [ -f "$BACKUP_PATH" ]; then
+        print_msg "Attempting to restore backup due to failure..."
+        if tar -xzf "$BACKUP_PATH" -C "$TARGET_PROFILE"; then
+            print_msg "Backup restored successfully."
+        else
+            print_error "CRITICAL: Failed to restore backup. Manual intervention required."
+        fi
+    fi
+    exit 1
+fi
+
+echo "=========================================="
+print_success "Update process completed successfully!"
+echo "Backup saved in: $BACKUP_PATH"
+echo "=========================================="
+
+exit 0
